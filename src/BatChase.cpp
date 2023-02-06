@@ -1,13 +1,27 @@
+// cspell:disable
 #include <iostream>
 
 #include <emscripten/html5.h>
 #include <emscripten/em_math.h>
+#include <emscripten/dom_pk_codes.h>
 #include <webgl/webgl2.h>
 
 #include <algorithm>
 #include <vector>
-// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
-// line ~25
+
+uint8_t keysOld[0x10000] = {}, keysNow[0x10000] = {};
+
+EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData)
+{
+    uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
+    keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
+    return EM_FALSE; // don't suppress the key event
+}
+
+bool is_key_pressed(DOM_PK_CODE_TYPE code) { return keysNow[code] && !keysOld[code]; }
+
+bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
+
 #define GAME_WIDTH 569
 #define GAME_HEIGHT 388
 #define STREET_HEIGHT 160
@@ -246,13 +260,19 @@ EM_BOOL game_tick(double t, void *)
         // ...
     }
 
+    memcpy(keysOld, keysNow, sizeof(keysOld));
     return EM_TRUE; // true == continue the loop
 }
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+void enter_game();
+
 void update_title(float t, float dt)
 {
-    // ...
+    if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
+        enter_game();
 }
+
+// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
 void update_game(float t, float dt) // line 301 
 {
@@ -290,13 +310,15 @@ int main() // line 445
     // testImage = create_texture();
     // load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
 
-    for(auto &i : images)
+    for(auto& img : images)
     {
-        i.glTexture = create_texture();
-        if (i.url)
-            load_image(i.glTexture, i.url, &i.width, &i.height);
+        img.glTexture = create_texture();
+        if (img.url)
+            load_image(img.glTexture, img.url, &img.width, &img.height);
     }
 
-    enter_game();
-    // ...
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, 0, key_handler);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, 0, key_handler);
+
+    enter_title();
 } // line 461
