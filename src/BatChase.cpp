@@ -1,8 +1,8 @@
 #include <iostream>
 
 #include <emscripten/html5.h>
+#include <emscripten/em_math.h>
 #include <webgl/webgl2.h>
- #include <emscripten/em_math.h>
 
 #include <algorithm>
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
@@ -10,6 +10,42 @@
 #define GAME_WIDTH 569
 #define GAME_HEIGHT 388
 #define STREET_HEIGHT 160
+
+struct Image
+{
+    const char *url;
+    GLuint glTexture;
+    int width, height;
+};
+
+Image images[] =
+{
+    {},
+    { "title.png" },
+    { "scorebar.png" },
+    { "road.png" },
+    { "batman.png" },
+    { "life.png" },
+    { "car1.png" },
+    { "car2.png" },
+    { "car3.png" },
+    { "car4.png" },
+    { "car5.png" },
+    { "car6.png" },
+    { "car7.png" },
+    { "car8.png" }
+};
+// In the same order as images array
+enum
+{
+    IMG_TEXT = 0,
+    IMG_TITLE,
+    IMG_SCOREBAR,
+    IMG_ROAD,
+    IMG_BATMAN,
+    IMG_LIFE,
+    IMG_CAR1, // ..., IMG_CAR8
+};
 
 GLuint compile_shader(GLenum type, const char* src)
 {
@@ -33,6 +69,37 @@ GLuint create_program(GLuint vertexShader, GLuint fragmentShader)
 GLuint vertexBuffer, matrixPosition, colorPosition;
 
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+
+extern "C" void load_image(GLuint glTexture, const char*url, int *width, int *height);
+
+GLuint create_texture()
+{
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return tex;
+}
+
+void draw_image(GLuint glTexture, float x, float y, float width, float height, float r=1.f, float g=1.f, float b=1.f, float a=1.f)
+{
+    const float pixelWidth = 2.f / GAME_WIDTH;
+    const float pixelHeight = 2.f / GAME_HEIGHT;
+    float spriteMatrix[16] = {
+        width*pixelWidth, 0, 0, 0,
+        0, height*pixelHeight, 0, 0,
+        0, 0, 1, 0,
+        (int)x*pixelWidth-1.f, (int)y*pixelHeight-1.f, 0, 1
+    };
+
+    glUniformMatrix4fv(matrixPosition, 1, 0, spriteMatrix);
+    glUniform4f(colorPosition, r, g, b, a);
+    glBindTexture(GL_TEXTURE_2D, glTexture);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
 
 // line ~201
 void init_webgl()
@@ -96,17 +163,31 @@ void init_webgl()
     glEnableVertexAttribArray(0);
 } // line 244
 
+ GLuint testImage;
+int testImageWidth, testImageHeight;
+
 EM_BOOL game_tick(double t, void *)
 {
-    glClearColor(emscripten_math_sin(t/500.0), 0.f, 0.f, 1.f);
+    glClearColor(0.f, emscripten_math_sin(t/500.0), 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
-    return EM_TRUE; // Jatka peliloopin ajoa
+    draw_image(testImage, 0, 0, testImageWidth, testImageHeight);
+    return EM_TRUE; // true == continue the loop
 }
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
-// line ~445
-int main()
+int main() // line 445
 {
     init_webgl();
     emscripten_request_animation_frame_loop(&game_tick, 0);
-}
+
+    testImage = create_texture();
+    load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
+
+    for(auto &i : images)
+    {
+        i.glTexture = create_texture();
+        if (i.url)
+            load_image(i.glTexture, i.url, &i.width, &i.height);
+    }
+    // ...
+} // line 461
