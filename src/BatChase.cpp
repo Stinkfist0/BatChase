@@ -273,9 +273,41 @@ void update_title(float t, float dt)
 }
 
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
 
 void update_game(float t, float dt) // line 301 
 {
+    Object *player = find_sprite(TAG_PLAYER);
+
+    // Jarruta pelaajan y-nopeutta (kitka)
+    player->vely -= sign(player->vely) * std::min(std::fabsf(player->vely), 0.004f * dt);
+
+    // Lisää pelaajan nopeutta näppäimillä
+    if (is_key_down(DOM_PK_ARROW_UP))
+        player->vely += dt * 0.008f;
+    if (is_key_down(DOM_PK_ARROW_DOWN))
+        player->vely -= dt * 0.008f;
+    if (is_key_down(DOM_PK_ARROW_LEFT))
+        player->velx -= dt * 0.003f;
+    if (is_key_down(DOM_PK_ARROW_RIGHT))
+        player->velx += dt * 0.001f;
+
+    // Rajaa maksiminopeus
+    player->velx = std::clamp(player->velx, 0.f, 0.55f);
+    player->vely = std::clamp(player->vely, -0.3f, 0.3f);
+
+    // Liiku y-suunnassa ja rajaa y-koordinaatti pelialueen sisään
+    player->y = std::clamp(player->y + player->vely * dt, 0.f, float(STREET_HEIGHT));
+
+    // Kameratrikki: pelaajan x-nopeus liikuttaa kaikkia peliobjekteja vasemmalle.
+    // Wrappaa myös taustakuvia toistumaan loputtomiin
+    for(auto& o : scene)
+    {
+        if (o.tag == TAG_ROAD || o.tag == TAG_ENEMY)
+            o.x -= player->velx * dt;
+        if (o.tag == TAG_ROAD && o.x < -images[IMG_ROAD].width)
+            o.x += 2*images[IMG_ROAD].width;
+    }
     // …
 } // line 411 
 
