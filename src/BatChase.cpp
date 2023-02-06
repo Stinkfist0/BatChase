@@ -5,6 +5,7 @@
 #include <webgl/webgl2.h>
 
 #include <algorithm>
+#include <vector>
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 // line ~25
 #define GAME_WIDTH 569
@@ -68,6 +69,60 @@ GLuint create_program(GLuint vertexShader, GLuint fragmentShader)
 
 GLuint vertexBuffer, matrixPosition, colorPosition;
 
+enum Tag
+{
+    TAG_NONE = 0,
+    TAG_PLAYER,
+    TAG_ENEMY,
+    TAG_ROAD,
+    TAG_LIFE1,
+    TAG_LIFE2,
+    TAG_LIFE3,
+    TAG_SCORE,
+    TAG_HIGH_SCORE,
+    TAG_MINUTES,
+    TAG_SECONDS
+};
+
+struct Object
+{
+    float x, y;
+    int img;
+    Tag tag;
+    // Jos img == IMG_TEXT:
+    char text[64];
+    float r,g,b,a;
+    int fontId, fontSize, spacing;
+    // Jos img != IMG_TEXT:
+    float mass, velx, vely;
+};
+
+std::vector<Object> scene;
+
+int find_sprite_index(Tag tag)
+{
+    for(size_t i = 0; i < scene.size(); ++i)
+        if (scene[i].tag == tag) return i;
+    return -1;
+}
+
+Object* find_sprite(Tag tag)
+{
+    int i = find_sprite_index(tag);
+    return (i >= 0) ? &scene[i] : 0;
+}
+
+void remove_sprite_at_index(int i)
+{
+    scene.erase(scene.begin() + i);
+}
+
+void remove_sprite(Tag tag)
+{
+    int i = find_sprite_index(tag);
+    if (i >= 0)
+        remove_sprite_at_index(i);
+}
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
 extern "C" void load_image(GLuint glTexture, const char*url, int *width, int *height);
@@ -163,25 +218,77 @@ void init_webgl()
     glEnableVertexAttribArray(0);
 } // line 244
 
- GLuint testImage;
+GLuint testImage;
 int testImageWidth, testImageHeight;
+
+void (*currentRoom)(float t, float dt) = nullptr;
 
 EM_BOOL game_tick(double t, void *)
 {
-    glClearColor(0.f, emscripten_math_sin(t/500.0), 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    draw_image(testImage, 0, 0, testImageWidth, testImageHeight);
+    // test code: animated colour
+    // glClearColor(0.f, emscripten_math_sin(t/500.0), 0.f, 1.f);
+    // glClear(GL_COLOR_BUFFER_BIT);
+
+    // test code: test image
+    // draw_image(testImage, 0, 0, testImageWidth, testImageHeight);
+
+    static double prevT;
+    float dt = std::min(50.f, (float)(t - prevT));
+    prevT = t;
+
+    if (currentRoom)
+        currentRoom(t, dt);
+
+    for(auto& o : scene)
+    {
+        if (o.img != IMG_TEXT)
+            draw_image(images[o.img].glTexture, o.x, o.y, images[o.img].width, images[o.img].height);
+        // ...
+    }
+
     return EM_TRUE; // true == continue the loop
 }
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+void update_title(float t, float dt)
+{
+    // ...
+}
+
+void update_game(float t, float dt) // line 301 
+{
+    // …
+} // line 411 
+
+void enter_title()
+{
+    scene.clear();
+    scene.push_back({ .x=0.f, .y=0.f, .img = IMG_TITLE });
+    currentRoom = update_title;
+}
+// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+
+void enter_game()
+{
+    scene.clear();
+    scene.push_back({ .x=0.f, .y=0.f, .img=IMG_ROAD, .tag=TAG_ROAD });
+    scene.push_back({ .x=4096.f, .y=0.f, .img=IMG_ROAD, .tag=TAG_ROAD });
+    scene.push_back({ .x=100.f, .y=120.f, .img=IMG_BATMAN, .tag=TAG_PLAYER, .mass=0.05f, .velx=0.05f });
+    scene.push_back({ .x=0.f, .y=314.f, .img=IMG_SCOREBAR });
+    scene.push_back({ .x=380.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE1 });
+    scene.push_back({ .x=440.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE2 });
+    scene.push_back({ .x=500.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE3 });
+
+    currentRoom = update_game;
+    // … 
+}
 
 int main() // line 445
 {
     init_webgl();
     emscripten_request_animation_frame_loop(&game_tick, 0);
 
-    testImage = create_texture();
-    load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
+    // testImage = create_texture();
+    // load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
 
     for(auto &i : images)
     {
@@ -189,5 +296,7 @@ int main() // line 445
         if (i.url)
             load_image(i.glTexture, i.url, &i.width, &i.height);
     }
+
+    enter_game();
     // ...
 } // line 461
