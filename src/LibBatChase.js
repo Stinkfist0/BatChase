@@ -37,5 +37,30 @@ mergeInto(LibraryManager.library, {
                 document.body.addEventListener('keydown', deferPlay);
             });
     },
-    // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
-}); // line 65
+    loadedFonts: {},
+    load_font__deps: ['loadedFonts'],
+    load_font: function (fontId, url) {
+        new FontFace(`font${fontId}`, `url(${UTF8ToString(url)})`).load().then(face => {
+            document.fonts.add(face);
+            _loadedFonts[`font${fontId}`] = 1;
+        });
+    },
+    upload_unicode_char_to_texture__deps: ['upload_flipped'],
+    upload_unicode_char_to_texture: function (fontId, unicodeChar, fontSize) {
+        if (!_loadedFonts[`font${fontId}`])
+            return 0;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = fontSize;
+        let ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'black';
+        ctx.globalCompositeOperator = 'copy';
+        ctx.globalAlpha = 0;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'white';
+        ctx.font = fontSize + `px font${fontId}`;
+        ctx.fillText(String.fromCharCode(unicodeChar), 0, canvas.height);
+        _upload_flipped(canvas);
+        return 1;
+    },
+});

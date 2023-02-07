@@ -1,6 +1,4 @@
 // cspell:disable
-#include <iostream>
-
 #include <emscripten/html5.h>
 #include <emscripten/em_math.h>
 #include <emscripten/dom_pk_codes.h>
@@ -8,6 +6,8 @@
 
 #include <algorithm>
 #include <vector>
+#include <array>
+#include <map>
 
 uint8_t keysOld[0x10000] = {}, keysNow[0x10000] = {};
 
@@ -208,6 +208,44 @@ void draw_image(GLuint glTexture, float x, float y, float width, float height, f
     glUniform4f(colorPosition, r, g, b, a);
     glBindTexture(GL_TEXTURE_2D, glTexture);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+JS_IMPORT void load_font(int fontId, const char* url);
+JS_IMPORT bool upload_unicode_char_to_texture(int id, int ch, int size);
+
+enum { FONT_C64 = 0 };
+
+// (fontId, unicodeChar, size) -> GL texture
+std::map<std::tuple<int, int, int>, Image> glyphs;
+
+Image* find_or_cache_font_char(int fontId, int unicodeChar, int size)
+{
+    auto t = std::make_tuple(fontId, unicodeChar, size);
+    auto iter = glyphs.find(t);
+    if (iter != glyphs.end())
+        return &iter->second;
+
+    Image i = { .glTexture = create_texture(), .width = size, .height = size };
+    if (upload_unicode_char_to_texture(fontId, unicodeChar, size))
+    {
+        glyphs[t] = i;
+        return &glyphs[t];
+    }
+
+    return 0;
+}
+
+void draw_text(
+    float x, float y, float r, float g, float b, float a,
+    const char *str, int fontId, int size, float spacing)
+{
+    for(; *str; ++str)
+    {
+        Image *i = find_or_cache_font_char(fontId, *str, size);
+        if (i)
+            draw_image(i->glTexture, x, y, i->width, i->height, r, g, b, a);
+        x += spacing;
+    }
 }
 
 // line ~201
@@ -508,6 +546,8 @@ int main() // line 445
 
     for(int i = 0; i < audioUrls.size(); ++i)
         preload_audio(i, audioUrls[i]);
+
+    load_font(FONT_C64, "c64.ttf");
 
     // disable bg music for now
     //play_audio(AUDIO_BG_MUSIC, EM_TRUE);
