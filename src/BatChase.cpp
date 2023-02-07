@@ -25,6 +25,8 @@ bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
 #define GAME_WIDTH 569
 #define GAME_HEIGHT 388
 #define STREET_HEIGHT 160
+// these functions are implemented in the JS library file
+#define JS_IMPORT extern "C"
 
 struct Image
 {
@@ -146,9 +148,38 @@ void remove_sprite(Tag tag)
     if (i >= 0)
         remove_sprite_at_index(i);
 }
-// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
-extern "C" void load_image(GLuint glTexture, const char* url, int* width, int* height);
+JS_IMPORT void preload_audio(int audioId, const char* url);
+JS_IMPORT void play_audio(int audioId, EM_BOOL loop);
+
+enum
+{
+    AUDIO_BG_MUSIC,
+    AUDIO_COLLISION1,
+    AUDIO_COLLISION2,
+    AUDIO_COLLISION3,
+    AUDIO_COLLISION4,
+    AUDIO_COLLISION5,
+    AUDIO_COLLISION6,
+    AUDIO_COLLISION7,
+    AUDIO_COLLISION8,
+    AUDIO_NUMELEMS
+};
+
+std::array<const char *, AUDIO_NUMELEMS> audioUrls{
+{
+    "batman.mp3",
+    "c1.wav",
+    "c2.wav",
+    "c3.wav",
+    "c4.wav",
+    "c5.wav",
+    "c6.wav",
+    "c7.wav",
+    "c8.wav" 
+}};
+
+JS_IMPORT void load_image(GLuint glTexture, const char* url, int* width, int* height);
 
 GLuint create_texture()
 {
@@ -282,6 +313,7 @@ void update_title(float t, float dt)
         enter_game();
 }
 
+// TODO modernisation idea: template function with "is number" concept
 // [min, max[
 float rnd(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
 int rnd(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
@@ -390,6 +422,11 @@ int main() // line 445
 
     // testImage = create_texture();
     // load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
+
+    for(int i = 0; i < audioUrls.size(); ++i)
+        preload_audio(i, audioUrls[i]);
+
+    play_audio(AUDIO_BG_MUSIC, EM_TRUE);
 
     for(auto& img : images)
     {
