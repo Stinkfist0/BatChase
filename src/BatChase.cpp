@@ -11,7 +11,7 @@
 
 uint8_t keysOld[0x10000] = {}, keysNow[0x10000] = {};
 
-EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData)
+EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData)
 {
     uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
     keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
@@ -282,8 +282,14 @@ void update_title(float t, float dt)
         enter_game();
 }
 
+// [min, max[
+float rnd(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
+int rnd(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
+
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
+
+float spawnTimer, score;
 
 void update_game(float t, float dt) // line 301 
 {
@@ -317,6 +323,37 @@ void update_game(float t, float dt) // line 301
         if (o.tag == TAG_ROAD && o.x < -images[IMG_ROAD].width)
             o.x += 2*images[IMG_ROAD].width;
     }
+
+    // spawn enemy cars
+    spawnTimer -= 2.f * player->velx * dt;
+    if (spawnTimer < 0.f && scene.size() < 15 + score / 10000) {
+        spawnTimer = rnd(0.f, std::min(2500.f, 25.f + 22000000.f / score));
+        scene.push_back(
+        {
+            .x = GAME_WIDTH * 1.5f, .y = rnd(0.f, float(STREET_HEIGHT)),
+            .img = IMG_CAR1 + rnd(0, 8), .tag = TAG_ENEMY,.mass = 1.f,
+            .velx = rnd(0.15f, 0.45f), .vely = rnd(-0.07f, 0.07f)
+        });
+    }
+
+    // move enemies
+    for(size_t i = 0; i < scene.size(); ++i)
+    {
+        auto& obj = scene[i];
+        if (obj.tag != TAG_ENEMY)
+            continue;
+        // move fw
+        obj.x += obj.velx * dt;
+        // move vertically, say within the street
+        obj.y = std::clamp(obj.y + obj.vely * dt, 0.f, float(STREET_HEIGHT));
+        // mirror Y speed if car collides to curb
+        if ((obj.y <= 0 && obj.vely < 0) || (obj.y >= STREET_HEIGHT && obj.vely > 0))
+            obj.vely = -obj.vely;
+        // remove cars that go out of the screen
+        if (std::fabs(obj.x) > 2*GAME_WIDTH)
+            remove_sprite_at_index(i--);
+    }
+
     // …
 } // line 411 
 
@@ -340,6 +377,9 @@ void enter_game()
     scene.push_back({ .x=500.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE3 });
 
     currentRoom = update_game;
+
+    spawnTimer = 0.f;
+    score = 0.f;
     // … 
 }
 
