@@ -28,13 +28,32 @@ bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
 
 struct Image
 {
-    const char *url;
-    GLuint glTexture;
-    int width, height;
+    const char* url{};
+    GLuint glTexture{};
+    int width{};
+    int height{};
 };
 
-Image images[] =
+// In the same order as images array
+enum
 {
+    IMG_TEXT = 0,
+    IMG_TITLE,
+    IMG_SCOREBAR,
+    IMG_ROAD,
+    IMG_BATMAN,
+    IMG_LIFE,
+    IMG_CAR1,
+    IMG_CAR2,
+    IMG_CAR3,
+    IMG_CAR4,
+    IMG_CAR5,
+    IMG_CAR6,
+    IMG_CAR7,
+    IMG_CAR8,
+    IMG_NUMELEMS
+};
+std::array<Image, IMG_NUMELEMS> images{{
     {},
     { "title.png" },
     { "scorebar.png" },
@@ -49,18 +68,8 @@ Image images[] =
     { "car6.png" },
     { "car7.png" },
     { "car8.png" }
-};
-// In the same order as images array
-enum
-{
-    IMG_TEXT = 0,
-    IMG_TITLE,
-    IMG_SCOREBAR,
-    IMG_ROAD,
-    IMG_BATMAN,
-    IMG_LIFE,
-    IMG_CAR1, // ..., IMG_CAR8
-};
+}};
+static_assert(IMG_NUMELEMS == images.size());
 
 GLuint compile_shader(GLenum type, const char* src)
 {
@@ -139,7 +148,7 @@ void remove_sprite(Tag tag)
 }
 // \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 
-extern "C" void load_image(GLuint glTexture, const char*url, int *width, int *height);
+extern "C" void load_image(GLuint glTexture, const char* url, int* width, int* height);
 
 GLuint create_texture()
 {
@@ -232,8 +241,9 @@ void init_webgl()
     glEnableVertexAttribArray(0);
 } // line 244
 
-GLuint testImage;
-int testImageWidth, testImageHeight;
+// test code: test image
+//GLuint testImage;
+//int testImageWidth, testImageHeight;
 
 void (*currentRoom)(float t, float dt) = nullptr;
 
@@ -277,12 +287,12 @@ float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
 
 void update_game(float t, float dt) // line 301 
 {
-    Object *player = find_sprite(TAG_PLAYER);
+    auto* player = find_sprite(TAG_PLAYER);
 
-    // Jarruta pelaajan y-nopeutta (kitka)
+    // slow down (friction)
     player->vely -= sign(player->vely) * std::min(std::fabsf(player->vely), 0.004f * dt);
 
-    // Lisää pelaajan nopeutta näppäimillä
+    // increase speed
     if (is_key_down(DOM_PK_ARROW_UP))
         player->vely += dt * 0.008f;
     if (is_key_down(DOM_PK_ARROW_DOWN))
@@ -292,17 +302,16 @@ void update_game(float t, float dt) // line 301
     if (is_key_down(DOM_PK_ARROW_RIGHT))
         player->velx += dt * 0.001f;
 
-    // Rajaa maksiminopeus
+    // clamp speed
     player->velx = std::clamp(player->velx, 0.f, 0.55f);
     player->vely = std::clamp(player->vely, -0.3f, 0.3f);
 
-    // Liiku y-suunnassa ja rajaa y-koordinaatti pelialueen sisään
+    // limit Y within the game area
     player->y = std::clamp(player->y + player->vely * dt, 0.f, float(STREET_HEIGHT));
 
-    // Kameratrikki: pelaajan x-nopeus liikuttaa kaikkia peliobjekteja vasemmalle.
-    // Wrappaa myös taustakuvia toistumaan loputtomiin
-    for(auto& o : scene)
-    {
+    // Camera trick: the player's X speed moves all games objects to the left.
+    // Also wrap background pictures infinitely
+    for(Object &o : scene) {
         if (o.tag == TAG_ROAD || o.tag == TAG_ENEMY)
             o.x -= player->velx * dt;
         if (o.tag == TAG_ROAD && o.x < -images[IMG_ROAD].width)
