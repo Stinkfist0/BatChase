@@ -8,6 +8,7 @@
 #include <vector>
 #include <array>
 #include <map>
+#include <cstdio>
 
 uint8_t keysOld[0x10000] = {}, keysNow[0x10000] = {};
 
@@ -248,7 +249,6 @@ void draw_text(
     }
 }
 
-// line ~201
 void init_webgl()
 {
     EM_ASM(document.body.style = 'margin: 0px; overflow: hidden; background: #787878;');
@@ -308,7 +308,7 @@ void init_webgl()
     glBufferData(GL_ARRAY_BUFFER, sizeof(pos), pos, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
-} // line 244
+}
 
 // test code: test image
 //GLuint testImage;
@@ -332,11 +332,17 @@ EM_BOOL game_tick(double t, void *)
     if (currentRoom)
         currentRoom(t, dt);
 
-    for(auto& o : scene)
+    for(auto& obj : scene)
     {
-        if (o.img != IMG_TEXT)
-            draw_image(images[o.img].glTexture, o.x, o.y, images[o.img].width, images[o.img].height);
-        // ...
+        if (obj.img == IMG_TEXT)
+        {
+            draw_text(obj.x, obj.y, obj.r, obj.g, obj.b, obj.a, obj.text, obj.fontId, obj.fontSize, obj.spacing);
+        }
+        else
+        {
+            const auto& img = images[obj.img];
+            draw_image(img.glTexture, obj.x, obj.y, img.width, img.height);
+        }
     }
 
     memcpy(keysOld, keysNow, sizeof(keysOld));
@@ -373,10 +379,10 @@ void update_title(float t, float dt)
 float rnd(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
 int rnd(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
 
-// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
 float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
 
 float spawnTimer, score;
+float gameStartTime, highscore = 5000;
 
 void update_game(float t, float dt) // line 301 
 {
@@ -507,8 +513,24 @@ void update_game(float t, float dt) // line 301
             }
         }
     }
-    // ...
-} // 411
+
+    // päivitä pelaajan pisteet ja piste-ennätys
+    score += player->velx * dt;
+    highscore = std::max(score, highscore);
+
+    // kirjoita uusi pistetilanne merkkijonoksi
+    std::sprintf(find_sprite(TAG_SCORE)->text, "%06d0", (int)score/10);
+
+    // kirjoita piste-ennätys merkkijonoksi ja vilkuta tekstiä puna-valkoisena jos ennätys on meidän
+    Object *o = find_sprite(TAG_HIGH_SCORE);
+    std::sprintf(o->text, "%06d0", (int)highscore/10);
+    o->g = o->b = (highscore == score && fmod(t, 1000.f) < 500.f) ? 0 : 1;
+
+    // päivitä peliaika mm:ss -muodossa
+    int gameSeconds = (int)((emscripten_performance_now() - gameStartTime) / 1000.0);
+    std::sprintf(find_sprite(TAG_MINUTES)->text, "%02d", gameSeconds / 60);
+    std::sprintf(find_sprite(TAG_SECONDS)->text, "%02d", gameSeconds % 60);
+}
 
 void enter_title()
 {
@@ -516,7 +538,11 @@ void enter_title()
     scene.push_back({ .x=0.f, .y=0.f, .img = IMG_TITLE });
     currentRoom = update_title;
 }
-// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+
+Object create_text(float x, float y, Tag tag)
+{
+    return { .x=x, .y=y, .img=IMG_TEXT, .tag=tag, .r=1.f, .g=1.f, .b=1.f, .a=1.f, .fontId=FONT_C64, .fontSize=20, .spacing=15 };
+}
 
 void enter_game()
 {
@@ -529,14 +555,19 @@ void enter_game()
     scene.push_back({ .x=440.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE2 });
     scene.push_back({ .x=500.f, .y=330.f, .img=IMG_LIFE, .tag=TAG_LIFE3 });
 
+    scene.push_back(create_text(165.f, 364.f, TAG_SCORE));
+    scene.push_back(create_text(165.f, 332.f, TAG_HIGH_SCORE));
+    scene.push_back(create_text(465.f, 364.f, TAG_MINUTES));
+    scene.push_back(create_text(510.f, 364.f, TAG_SECONDS));
+
     currentRoom = update_game;
 
+    gameStartTime = emscripten_performance_now();
     spawnTimer = 0.f;
     score = 0.f;
-    // … 
 }
 
-int main() // line 445
+int main()
 {
     init_webgl();
     emscripten_request_animation_frame_loop(&game_tick, 0);
@@ -563,4 +594,4 @@ int main() // line 445
     emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, 0, key_handler);
 
     enter_title();
-} // line 461
+}
