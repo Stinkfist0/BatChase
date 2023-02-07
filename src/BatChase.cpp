@@ -116,7 +116,7 @@ struct Object
     Tag tag;
     // Jos img == IMG_TEXT:
     char text[64];
-    float r,g,b,a;
+    float r, g, b, a;
     int fontId, fontSize, spacing;
     // Jos img != IMG_TEXT:
     float mass, velx, vely;
@@ -127,7 +127,8 @@ std::vector<Object> scene;
 int find_sprite_index(Tag tag)
 {
     for(size_t i = 0; i < scene.size(); ++i)
-        if (scene[i].tag == tag) return i;
+        if (scene[i].tag == tag)
+            return i;
     return -1;
 }
 
@@ -193,16 +194,15 @@ GLuint create_texture()
     return tex;
 }
 
-void draw_image(GLuint glTexture, float x, float y, float width, float height, float r=1.f, float g=1.f, float b=1.f, float a=1.f)
+void draw_image(GLuint glTexture, float x, float y, float width, float height, float r = 1.f, float g = 1.f, float b = 1.f, float a = 1.f)
 {
     const float pixelWidth = 2.f / GAME_WIDTH;
     const float pixelHeight = 2.f / GAME_HEIGHT;
     float spriteMatrix[16] = {
-        width*pixelWidth, 0, 0, 0,
-        0, height*pixelHeight, 0, 0,
+        width * pixelWidth, 0, 0, 0,
+        0, height * pixelHeight, 0, 0,
         0, 0, 1, 0,
-        (int)x*pixelWidth-1.f, (int)y*pixelHeight-1.f, 0, 1
-    };
+        (int)x * pixelWidth - 1.f, (int)y * pixelHeight - 1.f, 0, 1};
 
     glUniformMatrix4fv(matrixPosition, 1, 0, spriteMatrix);
     glUniform4f(colorPosition, r, g, b, a);
@@ -304,8 +304,25 @@ EM_BOOL game_tick(double t, void *)
     memcpy(keysOld, keysNow, sizeof(keysOld));
     return EM_TRUE; // true == continue the loop
 }
-// \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+
+// Laskee spriten keskipisteen
+void get_center_pos(const Object& o, float &cx, float &cy)
+{
+    cx = o.x + images[o.img].width / 2.f;
+    cy = o.y + images[o.img].height / 2.f;
+}
+// Laskee kahden spriten X- ja Y-leikkauksen
+void get_overlap_amount(const Object &a, const Object &b, float &x, float &y)
+{
+    x = std::min(a.x + images[a.img].width - b.x, b.x + images[b.img].width - a.x);
+    y = std::min(a.y + images[a.img].height - b.y, b.y + images[b.img].height - a.y);
+}
+
+float lastHitTime;
+int lives;
+
 void enter_game();
+void enter_title();
 
 void update_title(float t, float dt)
 {
@@ -349,16 +366,18 @@ void update_game(float t, float dt) // line 301
 
     // Camera trick: the player's X speed moves all games objects to the left.
     // Also wrap background pictures infinitely
-    for(Object &o : scene) {
+    for(Object& o : scene)
+    {
         if (o.tag == TAG_ROAD || o.tag == TAG_ENEMY)
             o.x -= player->velx * dt;
         if (o.tag == TAG_ROAD && o.x < -images[IMG_ROAD].width)
-            o.x += 2*images[IMG_ROAD].width;
+            o.x += 2 * images[IMG_ROAD].width;
     }
 
     // spawn enemy cars
     spawnTimer -= 2.f * player->velx * dt;
-    if (spawnTimer < 0.f && scene.size() < 15 + score / 10000) {
+    if (spawnTimer < 0.f && scene.size() < 15 + score / 10000)
+    {
         spawnTimer = rnd(0.f, std::min(2500.f, 25.f + 22000000.f / score));
         scene.push_back(
         {
@@ -382,12 +401,76 @@ void update_game(float t, float dt) // line 301
         if ((obj.y <= 0 && obj.vely < 0) || (obj.y >= STREET_HEIGHT && obj.vely > 0))
             obj.vely = -obj.vely;
         // remove cars that go out of the screen
-        if (std::fabs(obj.x) > 2*GAME_WIDTH)
+        if (std::fabs(obj.x) > 2 * GAME_WIDTH)
             remove_sprite_at_index(i--);
     }
 
-    // …
-} // line 411 
+    bool player_collided = false;
+    for (size_t i = 1; i < scene.size(); ++i)
+    {
+        if (scene[i].tag != TAG_ENEMY && scene[i].tag != TAG_PLAYER)
+            continue;
+
+        for (size_t j = 0; j < i; ++j)
+        {
+            if (scene[j].tag != TAG_ENEMY && scene[j].tag != TAG_PLAYER)
+                continue;
+            Object &a = scene[i], &b = scene[j];
+            float a_cx, a_cy, b_cx, b_cy, x_overlap, y_overlap;
+            get_overlap_amount(a, b, x_overlap, y_overlap);
+            if (x_overlap > 0.f && y_overlap > 0.f)
+            {
+                // SAT
+                get_center_pos(a, a_cx, a_cy);
+                get_center_pos(b, b_cx, b_cy);
+                float xdir = sign(b_cx - a_cx) * x_overlap * 0.5f;
+                float ydir = sign(b_cy - a_cy) * y_overlap * 0.5f;
+                float xveldiff = 2.f * (b.velx - a.velx) / (a.mass + b.mass);
+                float yveldiff = 2.f * (b.vely - a.vely) / (a.mass + b.mass);
+                if (x_overlap <= y_overlap) // X-suuntainen
+                {
+                    a.x -= xdir;
+                    b.x += xdir; // Erota autot X
+                    if (xdir * xveldiff <= 0.f)
+                    {
+                        a.velx += b.mass * xveldiff;
+                        b.velx -= a.mass * xveldiff;
+                        if (a.tag == TAG_PLAYER || b.tag == TAG_PLAYER)
+                            player_collided = true;
+                    }
+                }
+                else // Y-akselin suuntainen törmäys
+                {
+                    a.y -= ydir;
+                    b.y += ydir; // Erota autot Y
+                    if (ydir * yveldiff <= 0.f)
+                    {
+                        a.vely += b.mass * yveldiff;
+                        b.vely -= a.mass * yveldiff;
+                        if (a.tag == TAG_PLAYER || b.tag == TAG_PLAYER)
+                            player_collided = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (player_collided)
+    {
+        play_audio(AUDIO_COLLISION1 + rnd(0, 8), EM_FALSE);
+        if (t - lastHitTime > 500)
+        {
+            lastHitTime = t;
+            remove_sprite((Tag)(TAG_LIFE1 + --lives));
+            if (lives <= 0)
+            {
+                enter_title();
+                return;
+            }
+        }
+    }
+    // ...
+} // 411
 
 void enter_title()
 {
@@ -426,7 +509,8 @@ int main() // line 445
     for(int i = 0; i < audioUrls.size(); ++i)
         preload_audio(i, audioUrls[i]);
 
-    play_audio(AUDIO_BG_MUSIC, EM_TRUE);
+    // disable bg music for now
+    //play_audio(AUDIO_BG_MUSIC, EM_TRUE);
 
     for(auto& img : images)
     {
