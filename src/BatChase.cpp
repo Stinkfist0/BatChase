@@ -333,7 +333,7 @@ void enter_game();
 void enter_title();
 
 float lastHitTime;
-int lives;
+int lives = 3;
 float spawnTimer, score;
 float gameStartTime, highscore = 5000;
 uint8_t keysOld[0x10000], keysNow[0x10000];
