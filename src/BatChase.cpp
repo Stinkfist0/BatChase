@@ -10,24 +10,26 @@
 #include <map>
 #include <cstdio>
 
-uint8_t keysOld[0x10000] = {}, keysNow[0x10000] = {};
+constexpr int GAME_WIDTH = 569;
+constexpr int GAME_HEIGHT = 388;
+constexpr int STREET_HEIGHT = 160;
 
-EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData)
-{
-    uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
-    keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
-    return EM_FALSE; // don't suppress the key event
-}
-
-bool is_key_pressed(DOM_PK_CODE_TYPE code) { return keysNow[code] && !keysOld[code]; }
-
-bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
-
-#define GAME_WIDTH 569
-#define GAME_HEIGHT 388
-#define STREET_HEIGHT 160
 // these functions are implemented in the JS library file
-#define JS_IMPORT extern "C"
+extern "C"
+{
+void load_image(GLuint glTexture, const char* url, int* width, int* height);
+void load_font(int fontId, const char* url);
+bool upload_unicode_char_to_texture(int id, int ch, int size);
+void preload_audio(int audioId, const char* url);
+void play_audio(int audioId, EM_BOOL loop);
+}
+// [min, max[
+//template <typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
+//T random(T min, T max) { return min + static_cast<T>(emscripten_math_random()) * (max - min); }
+float random(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
+int random(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
+
+float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
 
 struct Image
 {
@@ -38,7 +40,7 @@ struct Image
 };
 
 // In the same order as images array
-enum
+enum ImageId
 {
     IMG_TEXT = 0,
     IMG_TITLE,
@@ -54,9 +56,10 @@ enum
     IMG_CAR6,
     IMG_CAR7,
     IMG_CAR8,
-    IMG_NUMELEMS
+    IMG_NUM_ELEMS,
+    IMG_NUM_CARS = IMG_CAR8 - IMG_CAR1 + 1,
 };
-std::array<Image, IMG_NUMELEMS> images{{
+std::array<Image, IMG_NUM_ELEMS> images{{
     {},
     { "title.png" },
     { "scorebar.png" },
@@ -72,7 +75,7 @@ std::array<Image, IMG_NUMELEMS> images{{
     { "car7.png" },
     { "car8.png" }
 }};
-static_assert(IMG_NUMELEMS == images.size());
+static_assert(IMG_NUM_ELEMS == images.size());
 
 GLuint compile_shader(GLenum type, const char* src)
 {
@@ -110,16 +113,23 @@ enum Tag
     TAG_SECONDS
 };
 
-struct Object
+struct Text
 {
-    float x, y;
-    int img;
-    Tag tag;
-    // Jos img == IMG_TEXT:
     char text[64];
     float r, g, b, a;
     int fontId, fontSize, spacing;
-    // Jos img != IMG_TEXT:
+};
+
+struct Object
+{
+    float x, y;
+    ImageId img;
+    Tag tag;
+    // if img == IMG_TEXT
+    char text[64];
+    float r, g, b, a;
+    int fontId, fontSize, spacing;
+    // else
     float mass, velx, vely;
 };
 
@@ -151,10 +161,7 @@ void remove_sprite(Tag tag)
         remove_sprite_at_index(i);
 }
 
-JS_IMPORT void preload_audio(int audioId, const char* url);
-JS_IMPORT void play_audio(int audioId, EM_BOOL loop);
-
-enum
+enum AudioId
 {
     AUDIO_BG_MUSIC,
     AUDIO_COLLISION1,
@@ -180,8 +187,6 @@ std::array<const char *, AUDIO_NUMELEMS> audioUrls{
     "c7.wav",
     "c8.wav" 
 }};
-
-JS_IMPORT void load_image(GLuint glTexture, const char* url, int* width, int* height);
 
 GLuint create_texture()
 {
@@ -210,9 +215,6 @@ void draw_image(GLuint glTexture, float x, float y, float width, float height, f
     glBindTexture(GL_TEXTURE_2D, glTexture);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
-
-JS_IMPORT void load_font(int fontId, const char* url);
-JS_IMPORT bool upload_unicode_char_to_texture(int id, int ch, int size);
 
 enum { FONT_C64 = 0 };
 
@@ -314,7 +316,28 @@ void init_webgl()
 //GLuint testImage;
 //int testImageWidth, testImageHeight;
 
-void (*currentRoom)(float t, float dt) = nullptr;
+// Get center point of a sprite
+void get_center_pos(const Object& o, float &cx, float &cy)
+{
+    cx = o.x + images[o.img].width / 2.f;
+    cy = o.y + images[o.img].height / 2.f;
+}
+// Laskee kahden spriten X- ja Y-leikkauksen
+void get_overlap_amount(const Object& a, const Object& b, float& x, float& y)
+{
+    x = std::min(a.x + images[a.img].width - b.x, b.x + images[b.img].width - a.x);
+    y = std::min(a.y + images[a.img].height - b.y, b.y + images[b.img].height - a.y);
+}
+
+void enter_game();
+void enter_title();
+
+float lastHitTime;
+int lives;
+float spawnTimer, score;
+float gameStartTime, highscore = 5000;
+uint8_t keysOld[0x10000], keysNow[0x10000];
+void (*currentRoom)(float t, float dt);
 
 EM_BOOL game_tick(double t, void *)
 {
@@ -346,27 +369,19 @@ EM_BOOL game_tick(double t, void *)
     }
 
     memcpy(keysOld, keysNow, sizeof(keysOld));
-    return EM_TRUE; // true == continue the loop
+    return EM_TRUE; // continue the loop
 }
 
-// Laskee spriten keskipisteen
-void get_center_pos(const Object& o, float &cx, float &cy)
+EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData)
 {
-    cx = o.x + images[o.img].width / 2.f;
-    cy = o.y + images[o.img].height / 2.f;
-}
-// Laskee kahden spriten X- ja Y-leikkauksen
-void get_overlap_amount(const Object &a, const Object &b, float &x, float &y)
-{
-    x = std::min(a.x + images[a.img].width - b.x, b.x + images[b.img].width - a.x);
-    y = std::min(a.y + images[a.img].height - b.y, b.y + images[b.img].height - a.y);
+    uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
+    keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
+    return EM_FALSE; // don't suppress the key event
 }
 
-float lastHitTime;
-int lives;
+bool is_key_pressed(DOM_PK_CODE_TYPE code) { return keysNow[code] && !keysOld[code]; }
 
-void enter_game();
-void enter_title();
+bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
 
 void update_title(float t, float dt)
 {
@@ -374,17 +389,7 @@ void update_title(float t, float dt)
         enter_game();
 }
 
-// TODO modernisation idea: template function with "is number" concept
-// [min, max[
-float rnd(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
-int rnd(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
-
-float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
-
-float spawnTimer, score;
-float gameStartTime, highscore = 5000;
-
-void update_game(float t, float dt) // line 301 
+void update_game(float t, float dt)
 {
     auto* player = find_sprite(TAG_PLAYER);
 
@@ -422,12 +427,13 @@ void update_game(float t, float dt) // line 301
     spawnTimer -= 2.f * player->velx * dt;
     if (spawnTimer < 0.f && scene.size() < 15 + score / 10000)
     {
-        spawnTimer = rnd(0.f, std::min(2500.f, 25.f + 22000000.f / score));
+        spawnTimer = random(0.f, std::min(2500.f, 25.f + 22000000.f / score));
+        auto randomCarImg = (ImageId)(IMG_CAR1 + random(0, (int)IMG_NUM_CARS));
         scene.push_back(
         {
-            .x = GAME_WIDTH * 1.5f, .y = rnd(0.f, float(STREET_HEIGHT)),
-            .img = IMG_CAR1 + rnd(0, 8), .tag = TAG_ENEMY,.mass = 1.f,
-            .velx = rnd(0.15f, 0.45f), .vely = rnd(-0.07f, 0.07f)
+            .x = GAME_WIDTH * 1.5f, .y = random(0.f, float(STREET_HEIGHT)),
+            .img =  randomCarImg, .tag = TAG_ENEMY,.mass = 1.f,
+            .velx = random(0.15f, 0.45f), .vely = random(-0.07f, 0.07f)
         });
     }
 
@@ -501,7 +507,8 @@ void update_game(float t, float dt) // line 301
 
     if (player_collided)
     {
-        play_audio(AUDIO_COLLISION1 + rnd(0, 8), EM_FALSE);
+        // TODO magic number 8
+        play_audio(AUDIO_COLLISION1 + random(0, 8), EM_FALSE);
         if (t - lastHitTime > 500)
         {
             lastHitTime = t;
