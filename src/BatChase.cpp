@@ -333,7 +333,7 @@ void enter_game();
 void enter_title();
 
 float lastHitTime;
-int lives = 3;
+int lives;
 float spawnTimer, score;
 float gameStartTime, highscore = 5000;
 uint8_t keysOld[0x10000], keysNow[0x10000];
@@ -570,6 +570,8 @@ void enter_game()
     currentRoom = update_game;
 
     gameStartTime = emscripten_performance_now();
+    lastHitTime = 0.f;
+    lives = 3;
     spawnTimer = 0.f;
     score = 0.f;
 }
