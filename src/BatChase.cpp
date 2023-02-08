@@ -9,6 +9,7 @@
 #include <array>
 #include <map>
 #include <cstdio>
+#include <functional>
 
 constexpr int GAME_WIDTH = 569;
 constexpr int GAME_HEIGHT = 388;
@@ -23,11 +24,10 @@ bool upload_unicode_char_to_texture(int id, int ch, int size);
 void preload_audio(int audioId, const char* url);
 void play_audio(int audioId, EM_BOOL loop);
 }
+
 // [min, max[
-//template <typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
-//T random(T min, T max) { return min + static_cast<T>(emscripten_math_random()) * (max - min); }
-float random(float min, float max) { return min + (float)emscripten_math_random() * (max - min); }
-int random(int min, int max) { return min + (int)(emscripten_math_random() * (max - min)); }
+template <typename T, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
+T random(T min, T max) { return min + T(emscripten_math_random() * (max - min)); }
 
 float sign(float x) { return x > 0.f ? 1.f : (x < 0.f ? -1.f : 0.f); }
 
@@ -44,6 +44,7 @@ enum ImageId
 {
     IMG_TEXT = 0,
     IMG_TITLE,
+    IMG_ENDSCREEN,
     IMG_SCOREBAR,
     IMG_ROAD,
     IMG_BATMAN,
@@ -62,6 +63,7 @@ enum ImageId
 std::array<Image, IMG_NUM_ELEMS> images{{
     {},
     { "title.png" },
+    { "endscreen.png" },
     { "scorebar.png" },
     { "road.png" },
     { "batman.png" },
@@ -167,6 +169,7 @@ enum AudioId
     AUDIO_COLLISION6,
     AUDIO_COLLISION7,
     AUDIO_COLLISION8,
+    AUDIO_NUM_COLLISIONS = AUDIO_COLLISION8 - AUDIO_COLLISION1 + 1,
     AUDIO_NUMELEMS
 };
 
@@ -335,13 +338,14 @@ void get_overlap_amount(const Object& a, const Object& b, float& x, float& y)
 
 void enter_game();
 void enter_title();
+void EnterEndScreen();
 
 float lastHitTime;
 int lives;
 float spawnTimer, score;
 float gameStartTime, highscore = 5000;
 uint8_t keysOld[0x10000], keysNow[0x10000];
-void (*currentRoom)(float t, float dt);
+std::function<void(float /*t*/, float /*dt*/)> currentRoom;
 
 EM_BOOL game_tick(double t, void *)
 {
@@ -391,6 +395,12 @@ void update_title(float t, float dt)
 {
     if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
         enter_game();
+}
+
+void UpdateEndSreen(float t, float dt)
+{
+    if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
+        enter_title();
 }
 
 void update_game(float t, float dt)
@@ -511,15 +521,14 @@ void update_game(float t, float dt)
 
     if (player_collided)
     {
-        // TODO magic number 8
-        play_audio(AUDIO_COLLISION1 + random(0, 8), EM_FALSE);
+        play_audio(AUDIO_COLLISION1 + random(0, (int)AUDIO_NUM_COLLISIONS), EM_FALSE);
         if (t - lastHitTime > 500)
         {
             lastHitTime = t;
             remove_sprite((Tag)(TAG_LIFE1 + --lives));
             if (lives <= 0)
             {
-                enter_title();
+                EnterEndScreen();
                 return;
             }
         }
@@ -543,6 +552,11 @@ void update_game(float t, float dt)
     std::snprintf(find_sprite(TAG_SECONDS)->text, MaxTextLength, "%02d", gameSeconds % 60);
 }
 
+Object create_text(float x, float y, Tag tag)
+{
+    return { .x=x, .y=y, .img=IMG_TEXT, .tag=tag, .r=1.f, .g=1.f, .b=1.f, .a=1.f, .fontId=FONT_C64, .fontSize=20, .spacing=15 };
+}
+
 void enter_title()
 {
     scene.clear();
@@ -550,9 +564,14 @@ void enter_title()
     currentRoom = update_title;
 }
 
-Object create_text(float x, float y, Tag tag)
+void EnterEndScreen()
 {
-    return { .x=x, .y=y, .img=IMG_TEXT, .tag=tag, .r=1.f, .g=1.f, .b=1.f, .a=1.f, .fontId=FONT_C64, .fontSize=20, .spacing=15 };
+    scene.clear();
+    scene.push_back({ .x=0.f, .y=0.f, .img = IMG_ENDSCREEN });
+    scene.push_back(create_text(165.f, 364.f, TAG_SCORE));
+    std::snprintf(find_sprite(TAG_SCORE)->text, MaxTextLength, "%06d0", (int)score/10);
+
+    currentRoom = UpdateEndSreen;
 }
 
 void enter_game()
