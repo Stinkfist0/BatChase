@@ -113,24 +113,19 @@ enum Tag
     TAG_SECONDS
 };
 
-struct Text
-{
-    char text[64];
-    float r, g, b, a;
-    int fontId, fontSize, spacing;
-};
+constexpr int MaxTextLength = 64;
 
 struct Object
 {
-    float x, y;
-    ImageId img;
-    Tag tag;
+    float x{}, y{};
+    ImageId img{};
+    Tag tag{};
     // if img == IMG_TEXT
-    char text[64];
-    float r, g, b, a;
-    int fontId, fontSize, spacing;
+    char text[MaxTextLength];
+    float r{}, g{}, b{}, a{};
+    int fontId{}, fontSize{}, spacing{};
     // else
-    float mass, velx, vely;
+    float mass{}, velx{}, vely{};
 };
 
 std::vector<Object> scene;
@@ -264,7 +259,7 @@ void init_webgl()
 
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
-    attrs.alpha = 0;
+    attrs.alpha = EM_FALSE;
     attrs.majorVersion = 2;
     emscripten_webgl_make_context_current(
         emscripten_webgl_create_context("canvas", &attrs)
@@ -526,17 +521,17 @@ void update_game(float t, float dt)
     highscore = std::max(score, highscore);
 
     // kirjoita uusi pistetilanne merkkijonoksi
-    std::sprintf(find_sprite(TAG_SCORE)->text, "%06d0", (int)score/10);
+    std::snprintf(find_sprite(TAG_SCORE)->text, MaxTextLength, "%06d0", (int)score/10);
 
     // kirjoita piste-ennätys merkkijonoksi ja vilkuta tekstiä puna-valkoisena jos ennätys on meidän
     Object *o = find_sprite(TAG_HIGH_SCORE);
-    std::sprintf(o->text, "%06d0", (int)highscore/10);
+    std::snprintf(o->text, MaxTextLength, "%06d0", (int)highscore/10);
     o->g = o->b = (highscore == score && fmod(t, 1000.f) < 500.f) ? 0 : 1;
 
     // päivitä peliaika mm:ss -muodossa
     int gameSeconds = (int)((emscripten_performance_now() - gameStartTime) / 1000.0);
-    std::sprintf(find_sprite(TAG_MINUTES)->text, "%02d", gameSeconds / 60);
-    std::sprintf(find_sprite(TAG_SECONDS)->text, "%02d", gameSeconds % 60);
+    std::snprintf(find_sprite(TAG_MINUTES)->text, MaxTextLength, "%02d", gameSeconds / 60);
+    std::snprintf(find_sprite(TAG_SECONDS)->text, MaxTextLength, "%02d", gameSeconds % 60);
 }
 
 void enter_title()
