@@ -564,11 +564,13 @@ void enter_title()
     currentRoom = update_title;
 }
 
+constexpr int TopLeftToBottomLeft(int y) { return GAME_HEIGHT - y; }
+
 void EnterEndScreen()
 {
     scene.clear();
     scene.push_back({ .x=0.f, .y=0.f, .img = IMG_ENDSCREEN });
-    scene.push_back(create_text(165.f, 364.f, TAG_SCORE));
+    scene.push_back(create_text(359, TopLeftToBottomLeft(294) - 13, TAG_SCORE));
     std::snprintf(find_sprite(TAG_SCORE)->text, MaxTextLength, "%06d0", (int)score/10);
 
     currentRoom = UpdateEndSreen;
