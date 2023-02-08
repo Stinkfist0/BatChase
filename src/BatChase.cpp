@@ -246,16 +246,25 @@ void draw_text(
     }
 }
 
+void ResizeCanvas(double windowInnerWidth, double windowInnerHeight)
+{
+    double scale = std::min(windowInnerWidth / GAME_WIDTH,  windowInnerHeight / GAME_HEIGHT);
+    emscripten_set_element_css_size("canvas", scale * GAME_WIDTH, scale * GAME_HEIGHT);
+    emscripten_set_canvas_element_size("canvas", GAME_WIDTH, GAME_HEIGHT);
+}
+
+EM_BOOL ResizeHandler(int eventType, const EmscriptenUiEvent *uiEvent, void *userData)
+{
+    ResizeCanvas(uiEvent->windowInnerWidth, uiEvent->windowInnerHeight);
+    return EM_FALSE;
+}
+
 void init_webgl()
 {
     EM_ASM(document.body.style = 'margin: 0px; overflow: hidden; background: #787878;');
     EM_ASM(document.querySelector('canvas').style['imageRendering'] = 'pixelated');
-    double scale = std::min(
-        EM_ASM_DOUBLE(return window.innerWidth) / GAME_WIDTH,
-        EM_ASM_DOUBLE(return window.innerHeight) / GAME_HEIGHT
-    );
-    emscripten_set_element_css_size("canvas", scale * GAME_WIDTH, scale * GAME_HEIGHT);
-    emscripten_set_canvas_element_size("canvas", GAME_WIDTH, GAME_HEIGHT);
+
+    ResizeCanvas(EM_ASM_DOUBLE(return window.innerWidth), EM_ASM_DOUBLE(return window.innerHeight));
 
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
@@ -594,8 +603,10 @@ int main()
             load_image(img.glTexture, img.url, &img.width, &img.height);
     }
 
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, 0, key_handler);
-    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, 0, 0, key_handler);
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, key_handler);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, key_handler);
+
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_FALSE, ResizeHandler);
 
     enter_title();
 }
