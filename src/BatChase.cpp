@@ -336,16 +336,14 @@ void get_overlap_amount(const Object& a, const Object& b, float& x, float& y)
     y = std::min(a.y + images[a.img].height - b.y, b.y + images[b.img].height - a.y);
 }
 
-void enter_game();
-void enter_title();
-void EnterEndScreen();
-
 float lastHitTime;
 int lives;
 float spawnTimer, score;
 float gameStartTime, highscore = 5000;
-uint8_t keysOld[0x10000], keysNow[0x10000];
 std::function<void(float /*t*/, float /*dt*/)> currentRoom;
+
+uint8_t keysOld[0x10000], keysNow[0x10000];
+bool touchInput, touchDown, touchStarted;
 
 EM_BOOL game_tick(double t, void *)
 {
@@ -376,11 +374,12 @@ EM_BOOL game_tick(double t, void *)
         }
     }
 
+    touchStarted = false; // TODO temp. hack
     memcpy(keysOld, keysNow, sizeof(keysOld));
     return EM_TRUE; // continue the loop
 }
 
-EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* /* userData */)
+EM_BOOL KeyHandler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* /* userData */)
 {
     uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
     keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
@@ -391,16 +390,39 @@ bool is_key_pressed(DOM_PK_CODE_TYPE code) { return keysNow[code] && !keysOld[co
 
 bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
 
+void EnterTitle();
+void EnterGame();
+void EnterEndScreen();
+
+EM_BOOL TouchHandler(int eventType, const EmscriptenTouchEvent* /* touchEvent */, void* /* userData */)
+{
+    touchInput = true;
+    touchStarted = (eventType == EMSCRIPTEN_EVENT_TOUCHSTART);
+    switch (eventType)
+    {
+    case EMSCRIPTEN_EVENT_TOUCHSTART:
+    case EMSCRIPTEN_EVENT_TOUCHMOVE:
+        touchDown = true;
+        break;
+    case EMSCRIPTEN_EVENT_TOUCHEND:
+    case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+        touchDown = false;
+        break;
+    }
+
+    return EM_FALSE;
+}
+
 void update_title(float /* t */, float /* dt */)
 {
-    if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
-        enter_game();
+    if (touchStarted || is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
+        EnterGame();
 }
 
 void UpdateEndSreen(float /* t */, float /* dt */)
 {
-    if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
-        enter_title();
+    if (touchStarted || is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
+        EnterTitle();
 }
 
 void update_game(float t, float dt)
@@ -415,9 +437,9 @@ void update_game(float t, float dt)
         player->vely += dt * 0.008f;
     if (is_key_down(DOM_PK_ARROW_DOWN))
         player->vely -= dt * 0.008f;
-    if (is_key_down(DOM_PK_ARROW_LEFT))
+    if (is_key_down(DOM_PK_ARROW_LEFT) || (touchInput && !touchDown))
         player->velx -= dt * 0.003f;
-    if (is_key_down(DOM_PK_ARROW_RIGHT))
+    if (is_key_down(DOM_PK_ARROW_RIGHT) || (touchInput && touchDown))
         player->velx += dt * 0.001f;
 
     // clamp speed
@@ -557,7 +579,7 @@ Object create_text(float x, float y, Tag tag)
     return { .x=x, .y=y, .img=IMG_TEXT, .tag=tag, .r=1.f, .g=1.f, .b=1.f, .a=1.f, .fontId=FONT_C64, .fontSize=20, .spacing=15 };
 }
 
-void enter_title()
+void EnterTitle()
 {
     scene.clear();
     scene.push_back({ .x=0.f, .y=0.f, .img = IMG_TITLE });
@@ -576,7 +598,7 @@ void EnterEndScreen()
     currentRoom = UpdateEndSreen;
 }
 
-void enter_game()
+void EnterGame()
 {
     scene.clear();
     scene.push_back({ .x=0.f, .y=0.f, .img=IMG_ROAD, .tag=TAG_ROAD });
@@ -624,10 +646,15 @@ int main()
             load_image(img.glTexture, img.url, &img.width, &img.height);
     }
 
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, key_handler);
-    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, key_handler);
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, KeyHandler);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, KeyHandler);
 
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_FALSE, ResizeHandler);
 
-    enter_title();
+    emscripten_set_touchstart_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, TouchHandler);
+    emscripten_set_touchmove_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, TouchHandler);
+    emscripten_set_touchend_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, TouchHandler);
+    emscripten_set_touchcancel_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, EM_FALSE, TouchHandler);
+
+    EnterTitle();
 }
