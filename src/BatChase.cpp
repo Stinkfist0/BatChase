@@ -256,7 +256,7 @@ void ResizeCanvas(double windowInnerWidth, double windowInnerHeight)
     emscripten_set_canvas_element_size("canvas", GAME_WIDTH, GAME_HEIGHT);
 }
 
-EM_BOOL ResizeHandler(int eventType, const EmscriptenUiEvent *uiEvent, void *userData)
+EM_BOOL ResizeHandler(int /* eventType */, const EmscriptenUiEvent* uiEvent, void* /* userData */)
 {
     ResizeCanvas(uiEvent->windowInnerWidth, uiEvent->windowInnerHeight);
     return EM_FALSE;
@@ -380,7 +380,7 @@ EM_BOOL game_tick(double t, void *)
     return EM_TRUE; // continue the loop
 }
 
-EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData)
+EM_BOOL key_handler(int eventType, const EmscriptenKeyboardEvent* keyEvent, void* /* userData */)
 {
     uint16_t code = (uint16_t)emscripten_compute_dom_pk_code(keyEvent->code);
     keysNow[code] = (eventType == EMSCRIPTEN_EVENT_KEYDOWN) ? 1 : 0;
@@ -391,13 +391,13 @@ bool is_key_pressed(DOM_PK_CODE_TYPE code) { return keysNow[code] && !keysOld[co
 
 bool is_key_down(DOM_PK_CODE_TYPE code) { return keysNow[code]; }
 
-void update_title(float t, float dt)
+void update_title(float /* t */, float /* dt */)
 {
     if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
         enter_game();
 }
 
-void UpdateEndSreen(float t, float dt)
+void UpdateEndSreen(float /* t */, float /* dt */)
 {
     if (is_key_pressed(DOM_PK_ENTER) || is_key_pressed(DOM_PK_SPACE))
         enter_title();
@@ -609,7 +609,7 @@ int main()
     // testImage = create_texture();
     // load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
 
-    for(int i = 0; i < audioUrls.size(); ++i)
+    for(size_t i = 0; i < audioUrls.size(); ++i)
         preload_audio(i, audioUrls[i]);
 
     load_font(FONT_C64, "c64.ttf");
