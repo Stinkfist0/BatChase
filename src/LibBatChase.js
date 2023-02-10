@@ -1,16 +1,23 @@
 mergeInto(LibraryManager.library, {
     upload_flipped: function (img) {
-        GLctx.pixelStorei(0x9240/*GL_UNPACK_FLIP_Y_WEBGL*/, true);
-        GLctx.texImage2D(0xDE1/*GL_TEXTURE_2D*/, 0, 0x1908/*GL_RGBA*/, 0x1908/*GL_RGBA*/, 0x1401/*GL_UNSIGNED_BYTE*/, img);
-        GLctx.pixelStorei(0x9240/*GL_UNPACK_FLIP_Y_WEBGL*/, false);
+        const GL_UNPACK_FLIP_Y_WEBGL = 0x9240;
+        const GL_TEXTURE_2D = 0xDE1;
+        const GL_RGBA = 0x1908;
+        const GL_UNSIGNED_BYTE = 0x1401;
+
+        GLctx.pixelStorei(GL_UNPACK_FLIP_Y_WEBGL, true);
+        GLctx.texImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE, img);
+        GLctx.pixelStorei(GL_UNPACK_FLIP_Y_WEBGL, false);
     },
     load_image__deps: ['upload_flipped'],
     load_image: function (glTex, url, outWidth, outHeight) {
         let img = new Image();
         img.onload = () => {
+            const GL_TEXTURE_2D = 0xDE1;
+
             HEAPU32[outWidth >> 2] = img.width;
             HEAPU32[outHeight >> 2] = img.height;
-            GLctx.bindTexture(0xDE1/*GL_TEXTURE_2D*/, GL.textures[glTex]);
+            GLctx.bindTexture(GL_TEXTURE_2D, GL.textures[glTex]);
             _upload_flipped(img);
         };
         img.src = UTF8ToString(url);
