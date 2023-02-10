@@ -26,6 +26,8 @@ mergeInto(LibraryManager.library, {
     preload_audio__deps: ['preloaded_audio'],
     preload_audio: function (id, url) {
         let audio = new Audio(UTF8ToString(url));
+        // TODO hardcoded lower volume
+        audio.volume = 0.5;
         _preloaded_audio[id] = audio;
         audio.preload = 'auto';
     },

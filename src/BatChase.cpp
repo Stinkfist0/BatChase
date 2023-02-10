@@ -345,7 +345,7 @@ std::function<void(float /*t*/, float /*dt*/)> currentRoom;
 uint8_t keysOld[0x10000], keysNow[0x10000];
 bool touchInput, touchDown, touchStarted;
 
-EM_BOOL game_tick(double t, void *)
+EM_BOOL game_tick(double t, void * /* userData */)
 {
     // test code: animated colour
     // glClearColor(0.f, emscripten_math_sin(t/500.0), 0.f, 1.f);
@@ -626,7 +626,7 @@ void EnterGame()
 int main()
 {
     init_webgl();
-    emscripten_request_animation_frame_loop(&game_tick, 0);
+    emscripten_request_animation_frame_loop(&game_tick, nullptr);
 
     // testImage = create_texture();
     // load_image(testImage, "title.png", &testImageWidth, &testImageHeight);
@@ -636,8 +636,7 @@ int main()
 
     load_font(FONT_C64, "c64.ttf");
 
-    // disable bg music for now
-    //play_audio(AUDIO_BG_MUSIC, EM_TRUE);
+    play_audio(AUDIO_BG_MUSIC, EM_TRUE);
 
     for(auto& img : images)
     {
