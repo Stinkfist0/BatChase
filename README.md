@@ -1,8 +1,7 @@
 # BatChase
 
 A WebAssembly and WebGL game based on a Skrolli 2022.3 article by [Jukka Jylänki](https://github.com/juj/).
-
-Art assets from https://github.com/juj/bat_chase
+Art assets from https://github.com/juj/bat_chase. You can play the game at https://stinkfist0.github.io/.
 
 The plan is to
 
